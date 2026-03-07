@@ -1,0 +1,461 @@
+from typing import Dict, List, Optional, Any
+from dataclasses import dataclass
+import json
+import time
+
+
+@dataclass
+class ToolResult:
+    """Result from a tool execution."""
+    success: bool
+    data: Any
+    error: Optional[str] = None
+    execution_time: float = 0.0
+
+
+class AgenticLoop:
+    """Implements Gather → Plan → Act → Verify loop for AI operations."""
+    
+    def __init__(self, llm, workspace_manager, permission_system, tui=None):
+        self.llm = llm
+        self.workspace_manager = workspace_manager
+        self.permission_system = permission_system
+        self.tui = tui  # TUI for displaying tool calls (Phase 3)
+        self.current_context = []
+        self.tool_registry = {}
+        self.execution_history = []
+        self.active = False
+        self.current_plan = None
+        
+    def activate(self):
+        """Activate the agentic loop."""
+        self.active = True
+        return True
+    
+    def deactivate(self):
+        """Deactivate the agentic loop."""
+        self.active = False
+        return True
+    
+    def process_request(self, user_input: str, conversation_history: List) -> Dict[str, Any]:
+        """Process a user request through the agentic loop."""
+        if not self.active:
+            return {"success": False, "error": "Agentic loop not active"}
+        
+        try:
+            # Step 1: Gather - Analyze the request and context
+            context = self._gather_context(user_input, conversation_history)
+            
+            # Step 2: Plan - Create an execution plan
+            plan = self._create_plan(context)
+            self.current_plan = plan
+            
+            # Step 3: Act - Execute the plan
+            results = self._execute_plan(plan)
+            
+            # Step 4: Verify - Validate results
+            verification = self._verify_results(results, context)
+            
+            return {
+                "success": True,
+                "plan": plan,
+                "results": results,
+                "verification": verification,
+                "context": context
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def _gather_context(self, user_input: str, conversation_history: List) -> Dict[str, Any]:
+        """Gather context for the request."""
+        return {
+            "user_input": user_input,
+            "conversation_history": conversation_history[-5:],  # Last 5 messages
+            "workspace": self.workspace_manager.get_workspace(),
+            "available_tools": list(self.tool_registry.keys()),
+            "timestamp": time.time()
+        }
+    
+    def _create_plan(self, context: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Create an execution plan."""
+        user_input = context["user_input"]
+        
+        # Simple planning logic - can be enhanced with AI
+        plan = []
+        
+        # Check if file operations are needed
+        if any(keyword in user_input.lower() for keyword in ["read", "write", "file", "save", "load"]):
+            plan.append({
+                "tool": "file_operations",
+                "action": "analyze_file_request",
+                "description": "Analyze file operation request"
+            })
+        
+        # Check if git operations are needed
+        if any(keyword in user_input.lower() for keyword in ["git", "commit", "push", "pull"]):
+            plan.append({
+                "tool": "git_operations",
+                "action": "analyze_git_request", 
+                "description": "Analyze git operation request"
+            })
+        
+        # Check if search is needed
+        if any(keyword in user_input.lower() for keyword in ["search", "find", "look for"]):
+            plan.append({
+                "tool": "search",
+                "action": "analyze_search_request",
+                "description": "Analyze search request"
+            })
+        
+        return plan
+    
+    def _execute_plan(self, plan: List[Dict[str, Any]]) -> List[ToolResult]:
+        """Execute the plan."""
+        results = []
+        
+        for step in plan:
+            tool_name = step.get("tool")
+            action = step.get("action")
+            
+            if tool_name in self.tool_registry:
+                tool_info = self.tool_registry[tool_name]
+                
+                # Check permissions
+                if self.permission_system.current_mode == "ask":
+                    # For now, auto-approve simple operations
+                    permission_granted = True
+                elif self.permission_system.current_mode == "auto":
+                    permission_granted = True
+                elif self.permission_system.current_mode == "plan":
+                    permission_granted = True  # Already have plan
+                else:
+                    permission_granted = True
+                
+                if permission_granted:
+                    try:
+                        start_time = time.time()
+                        result_data = tool_info["func"](action, step)
+                        execution_time = time.time() - start_time
+                        
+                        result = ToolResult(
+                            success=True,
+                            data=result_data,
+                            execution_time=execution_time
+                        )
+                    except Exception as e:
+                        result = ToolResult(
+                            success=False,
+                            data=None,
+                            error=str(e)
+                        )
+                else:
+                    result = ToolResult(
+                        success=False,
+                        data=None,
+                        error="Permission denied"
+                    )
+            else:
+                result = ToolResult(
+                    success=False,
+                    data=None,
+                    error=f"Tool {tool_name} not found"
+                )
+            
+            results.append(result)
+            self.execution_history.append({
+                "step": step,
+                "result": result,
+                "timestamp": time.time()
+            })
+        
+        return results
+    
+    def _verify_results(self, results: List[ToolResult], context: Dict[str, Any]) -> Dict[str, Any]:
+        """Verify the results of execution."""
+        successful_results = [r for r in results if r.success]
+        failed_results = [r for r in results if not r.success]
+        
+        return {
+            "total_steps": len(results),
+            "successful_steps": len(successful_results),
+            "failed_steps": len(failed_results),
+            "success_rate": len(successful_results) / len(results) if results else 0,
+            "errors": [r.error for r in failed_results if r.error]
+        }
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Get current agentic loop status."""
+        return {
+            "active": self.active,
+            "current_plan": self.current_plan,
+            "execution_history_count": len(self.execution_history),
+            "available_tools": list(self.tool_registry.keys()),
+            "permission_mode": self.permission_system.current_mode.value if hasattr(self.permission_system.current_mode, 'value') else str(self.permission_system.current_mode)
+        }
+        
+    def register_tool(self, name: str, tool_func, description: str, parameters: Dict):
+        """Register a tool for AI use."""
+        self.tool_registry[name] = {
+            "func": tool_func,
+            "description": description,
+            "parameters": parameters
+        }
+    
+    def execute_loop(self, user_input: str) -> List[ToolResult]:
+        """Execute the full agentic loop."""
+        results = []
+        
+        # Gather - Collect context and understand request
+        context = self._gather_context(user_input)
+        
+        # Plan - Create execution plan
+        plan = self._create_plan(context)
+        
+        # Act - Execute the plan
+        for step in plan:
+            result = self._execute_step(step)
+            results.append(result)
+            
+            # Verify - Check if step succeeded and adjust if needed
+            if not result.success:
+                verification_result = self._verify_and_fix(step, result)
+                if verification_result:
+                    results.append(verification_result)
+        
+        return results
+    
+    def _gather_context(self, user_input: str) -> Dict:
+        """Gather relevant context for the request."""
+        context = {
+            "user_input": user_input,
+            "workspace": self.workspace_manager.get_workspace(),
+            "current_files": self._get_workspace_files(),
+            "recent_history": self.current_context[-5:],  # Last 5 interactions
+            "available_tools": list(self.tool_registry.keys())
+        }
+        
+        # Add file context if input mentions files
+        if any(keyword in user_input.lower() for keyword in ["file", "read", "write", "edit"]):
+            context["file_context"] = self._get_file_context(user_input)
+        
+        return context
+    
+    def _create_plan(self, context: Dict) -> List[Dict]:
+        """Create an execution plan based on context."""
+        # Use LLM to create plan
+        plan_prompt = self._create_plan_prompt(context)
+        
+        try:
+            response = self.llm.create_chat_completion(
+                messages=[{"role": "user", "content": plan_prompt}],
+                max_tokens=512,
+                temperature=0.1
+            )
+            
+            plan_text = response["choices"][0]["message"]["content"]
+            return self._parse_plan(plan_text)
+        
+        except Exception as e:
+            # Fallback to simple plan
+            return [{"type": "respond", "content": f"I'll help you with that. Error creating plan: {e}"}]
+    
+    def _execute_step(self, step: Dict) -> ToolResult:
+        """Execute a single step of the plan."""
+        start_time = time.time()
+        
+        try:
+            if step["type"] == "tool_call":
+                tool_name = step["tool"]
+                parameters = step.get("parameters", {})
+                
+                # Show tool call panel (Phase 3)
+                if self.tui:
+                    self.tui.show_tool_call(tool_name, parameters)
+                
+                if tool_name in self.tool_registry:
+                    tool_info = self.tool_registry[tool_name]
+                    
+                    # Check permissions
+                    from .permission_system import PermissionRequest
+                    perm_request = PermissionRequest(
+                        operation_type=step.get("operation_type", "unknown"),
+                        description=f"Execute {tool_name}: {step.get('description', '')}",
+                        details=step
+                    )
+                    
+                    if self.permission_system.check_permission(perm_request):
+                        result_data = tool_info["func"](**parameters)
+                        execution_time = time.time() - start_time
+                        
+                        result = ToolResult(
+                            success=True,
+                            data=result_data,
+                            execution_time=execution_time
+                        )
+                        
+                        # Show tool result panel (Phase 3)
+                        if self.tui:
+                            result_str = str(result_data) if result_data else "Success"
+                            self.tui.show_tool_result(tool_name, result_str[:1000], True)
+                    else:
+                        result = ToolResult(
+                            success=False,
+                            data=None,
+                            error="Permission denied",
+                            execution_time=time.time() - start_time
+                        )
+                        
+                        # Show tool error panel (Phase 3)
+                        if self.tui:
+                            self.tui.show_tool_result(tool_name, "Permission denied", False)
+                else:
+                    error_msg = f"Tool {tool_name} not found"
+                    result = ToolResult(
+                        success=False,
+                        data=None,
+                        error=error_msg,
+                        execution_time=time.time() - start_time
+                    )
+                    
+                    # Show tool error panel (Phase 3)
+                    if self.tui:
+                        self.tui.show_tool_result(tool_name, error_msg, False)
+            
+            elif step["type"] == "respond":
+                result = ToolResult(
+                    success=True,
+                    data={"response": step["content"]},
+                    execution_time=time.time() - start_time
+                )
+            
+            else:
+                result = ToolResult(
+                    success=False,
+                    data=None,
+                    error=f"Unknown step type: {step['type']}",
+                    execution_time=time.time() - start_time
+                )
+        
+        except Exception as e:
+            result = ToolResult(
+                success=False,
+                data=None,
+                error=str(e),
+                execution_time=time.time() - start_time
+            )
+        
+        # Record execution
+        self.execution_history.append({
+            "step": step,
+            "result": result,
+            "timestamp": time.time()
+        })
+        
+        return result
+    
+    def _verify_and_fix(self, step: Dict, result: ToolResult) -> Optional[ToolResult]:
+        """Verify step result and attempt to fix errors."""
+        if result.success:
+            return None
+        
+        # Try to automatically fix common errors
+        error_msg = result.error.lower()
+        
+        if "file not found" in error_msg and step["type"] == "tool_call":
+            # Try to find similar files
+            if step["tool"] == "read_file":
+                similar_files = self._find_similar_files(step["parameters"].get("filename", ""))
+                if similar_files:
+                    # Suggest alternative files
+                    return ToolResult(
+                        success=True,
+                        data={"suggestion": f"File not found. Similar files: {', '.join(similar_files)}"}
+                    )
+        
+        elif "permission denied" in error_msg:
+            # Request permission explicitly
+            return ToolResult(
+                success=True,
+                data={"permission_request": f"Permission needed for: {step.get('description', '')}"}
+            )
+        
+        return None
+    
+    def _create_plan_prompt(self, context: Dict) -> str:
+        """Create a prompt for plan generation."""
+        tools_desc = []
+        for name, info in self.tool_registry.items():
+            tools_desc.append(f"- {name}: {info['description']}")
+        
+        prompt = f"""
+Based on the following context, create a step-by-step plan to help the user.
+
+User Input: {context['user_input']}
+Available Tools:
+{chr(10).join(tools_desc)}
+
+Create a plan as a JSON array of steps. Each step should have:
+- type: "tool_call" or "respond"
+- tool: (for tool_call) the tool name
+- parameters: (for tool_call) tool parameters
+- content: (for respond) the response content
+- description: what this step accomplishes
+
+Example:
+[
+    {{"type": "tool_call", "tool": "read_file", "parameters": {{"filename": "config.py"}}, "description": "Read configuration file"}},
+    {{"type": "respond", "content": "I found the configuration...", "description": "Provide analysis"}}
+]
+
+Plan:
+"""
+        return prompt
+    
+    def _parse_plan(self, plan_text: str) -> List[Dict]:
+        """Parse the plan from LLM response."""
+        try:
+            # Extract JSON from the response
+            import re
+            json_match = re.search(r'\[.*\]', plan_text, re.DOTALL)
+            if json_match:
+                plan_json = json.loads(json_match.group())
+                return plan_json if isinstance(plan_json, list) else []
+        except:
+            pass
+        
+        # Fallback to simple response
+        return [{"type": "respond", "content": plan_text, "description": "AI response"}]
+    
+    def _get_workspace_files(self) -> List[str]:
+        """Get list of files in workspace."""
+        try:
+            result = self.workspace_manager.list_files("*")
+            if "files" in result:
+                return [f["name"] for f in result["files"] if f["type"] == "file"]
+        except:
+            pass
+        return []
+    
+    def _get_file_context(self, user_input: str) -> Dict:
+        """Get file context based on user input."""
+        # Simple implementation - could be enhanced with NLP
+        files = self._get_workspace_files()
+        mentioned_files = []
+        
+        for file in files:
+            if file.lower() in user_input.lower():
+                mentioned_files.append(file)
+        
+        return {"mentioned_files": mentioned_files, "available_files": files}
+    
+    def _find_similar_files(self, filename: str) -> List[str]:
+        """Find files with similar names."""
+        files = self._get_workspace_files()
+        similar = []
+        
+        for file in files:
+            # Simple similarity check
+            if filename.lower() in file.lower() or file.lower() in filename.lower():
+                similar.append(file)
+        
+        return similar[:5]  # Return top 5 similar files

@@ -1,0 +1,351 @@
+from typing import Dict, List, Optional, Any, Callable
+import subprocess
+import os
+import signal
+import threading
+import time
+from pathlib import Path
+import shlex
+
+
+class TerminalExecutor:
+    """Enhanced terminal command executor with async support."""
+    
+    def __init__(self):
+        self.running_processes = {}
+        self.command_history = []
+        self.output_handlers = {}
+        self.process_id_counter = 0
+    
+    def execute(self, command: str, cwd: Optional[str] = None, 
+                timeout: Optional[int] = 60, capture_output: bool = True,
+                env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+        """Execute a terminal command synchronously."""
+        try:
+            # Prepare environment
+            process_env = os.environ.copy()
+            if env:
+                process_env.update(env)
+            
+            # Execute command
+            result = subprocess.run(
+                command,
+                shell=True,
+                cwd=cwd,
+                capture_output=capture_output,
+                text=True,
+                timeout=timeout,
+                env=process_env
+            )
+            
+            # Record command in history
+            self.command_history.append({
+                "command": command,
+                "cwd": cwd,
+                "return_code": result.returncode,
+                "timestamp": time.time(),
+                "success": result.returncode == 0
+            })
+            
+            return {
+                "success": result.returncode == 0,
+                "stdout": result.stdout if capture_output else "",
+                "stderr": result.stderr if capture_output else "",
+                "return_code": result.returncode,
+                "command": command,
+                "cwd": cwd,
+                "timeout": timeout
+            }
+            
+        except subprocess.TimeoutExpired:
+            return {
+                "success": False,
+                "error": f"Command timed out after {timeout} seconds",
+                "command": command,
+                "cwd": cwd
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "command": command,
+                "cwd": cwd
+            }
+    
+    def execute_async(self, command: str, cwd: Optional[str] = None,
+                     output_handler: Optional[Callable] = None,
+                     completion_handler: Optional[Callable] = None,
+                     env: Optional[Dict[str, str]] = None) -> str:
+        """Execute a terminal command asynchronously."""
+        process_id = f"proc_{self.process_id_counter}"
+        self.process_id_counter += 1
+        
+        try:
+            # Prepare environment
+            process_env = os.environ.copy()
+            if env:
+                process_env.update(env)
+            
+            # Start process
+            process = subprocess.Popen(
+                command,
+                shell=True,
+                cwd=cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                env=process_env,
+                bufsize=1,
+                universal_newlines=True
+            )
+            
+            # Store process info
+            self.running_processes[process_id] = {
+                "process": process,
+                "command": command,
+                "cwd": cwd,
+                "start_time": time.time(),
+                "output_handler": output_handler,
+                "completion_handler": completion_handler
+            }
+            
+            # Start output monitoring thread
+            if output_handler:
+                output_thread = threading.Thread(
+                    target=self._monitor_output,
+                    args=(process_id, process, output_handler)
+                )
+                output_thread.daemon = True
+                output_thread.start()
+            
+            # Start completion monitoring thread
+            completion_thread = threading.Thread(
+                target=self._monitor_completion,
+                args=(process_id, process, completion_handler)
+            )
+            completion_thread.daemon = True
+            completion_thread.start()
+            
+            return process_id
+            
+        except Exception as e:
+            return f"error: {str(e)}"
+    
+    def _monitor_output(self, process_id: str, process: subprocess.Popen, 
+                       output_handler: Callable):
+        """Monitor process output and call handler."""
+        try:
+            for line in iter(process.stdout.readline, ''):
+                if line:
+                    output_handler(process_id, line.rstrip('\n'))
+        except Exception:
+            pass
+    
+    def _monitor_completion(self, process_id: str, process: subprocess.Popen,
+                          completion_handler: Optional[Callable]):
+        """Monitor process completion."""
+        try:
+            process.wait()
+            
+            # Get final return code
+            return_code = process.returncode
+            
+            # Record in history
+            process_info = self.running_processes.get(process_id, {})
+            self.command_history.append({
+                "command": process_info.get("command", ""),
+                "cwd": process_info.get("cwd"),
+                "return_code": return_code,
+                "timestamp": time.time(),
+                "success": return_code == 0,
+                "async": True
+            })
+            
+            # Call completion handler
+            if completion_handler:
+                completion_handler(process_id, return_code)
+            
+            # Clean up
+            if process_id in self.running_processes:
+                del self.running_processes[process_id]
+                
+        except Exception:
+            pass
+    
+    def terminate_process(self, process_id: str) -> bool:
+        """Terminate a running process."""
+        if process_id not in self.running_processes:
+            return False
+        
+        try:
+            process_info = self.running_processes[process_id]
+            process = process_info["process"]
+            
+            # Try graceful termination first
+            process.terminate()
+            
+            # Wait a bit for graceful termination
+            time.sleep(0.5)
+            
+            # Force kill if still running
+            if process.poll() is None:
+                process.kill()
+            
+            return True
+            
+        except Exception:
+            return False
+    
+    def get_running_processes(self) -> List[Dict[str, Any]]:
+        """Get list of running processes."""
+        processes = []
+        
+        for process_id, info in self.running_processes.items():
+            process = info["process"]
+            
+            processes.append({
+                "process_id": process_id,
+                "command": info["command"],
+                "cwd": info["cwd"],
+                "start_time": info["start_time"],
+                "running": process.poll() is None,
+                "pid": process.pid
+            })
+        
+        return processes
+    
+    def get_command_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get command history."""
+        history = self.command_history
+        
+        if limit:
+            history = history[-limit:]
+        
+        return history
+    
+    def clear_history(self) -> None:
+        """Clear command history."""
+        self.command_history.clear()
+    
+    def parse_command(self, command: str) -> Dict[str, Any]:
+        """Parse command into components."""
+        try:
+            # Use shlex for proper parsing
+            parts = shlex.split(command)
+            
+            if not parts:
+                return {"error": "Empty command"}
+            
+            return {
+                "executable": parts[0],
+                "arguments": parts[1:],
+                "raw_command": command,
+                "is_shell_builtin": self._is_shell_builtin(parts[0])
+            }
+            
+        except Exception as e:
+            return {"error": str(e)}
+    
+    def _is_shell_builtin(self, executable: str) -> bool:
+        """Check if command is a shell builtin."""
+        shell_builtins = {
+            'cd', 'echo', 'pwd', 'export', 'unset', 'alias', 'unalias',
+            'history', 'jobs', 'fg', 'bg', 'kill', 'wait', 'type',
+            'source', '.', 'exec', 'exit', 'return', 'set', 'shift'
+        }
+        return executable in shell_builtins
+    
+    def validate_command(self, command: str, cwd: Optional[str] = None) -> Dict[str, Any]:
+        """Validate command safety and permissions."""
+        # Basic safety checks
+        dangerous_commands = [
+            'rm -rf /', 'sudo rm', 'mkfs', 'format', 'fdisk',
+            'dd if=/dev/zero', 'chmod 777 /', 'chown root'
+        ]
+        
+        command_lower = command.lower()
+        for dangerous in dangerous_commands:
+            if dangerous in command_lower:
+                return {
+                    "safe": False,
+                    "warning": f"Potentially dangerous command detected: {dangerous}"
+                }
+        
+        # Check if workspace directory exists
+        if cwd and not Path(cwd).exists():
+            return {
+                "safe": False,
+                "error": f"Working directory does not exist: {cwd}"
+            }
+        
+        # Parse command
+        parsed = self.parse_command(command)
+        if "error" in parsed:
+            return {
+                "safe": False,
+                "error": parsed["error"]
+            }
+        
+        return {
+            "safe": True,
+            "parsed": parsed
+        }
+    
+    def get_command_suggestions(self, partial_command: str) -> List[str]:
+        """Get command suggestions based on partial input."""
+        suggestions = []
+        
+        # Common commands
+        common_commands = [
+            'ls', 'cd', 'pwd', 'mkdir', 'rm', 'cp', 'mv', 'cat', 'less', 'more',
+            'grep', 'find', 'chmod', 'chown', 'ps', 'kill', 'top', 'df', 'du',
+            'git', 'npm', 'pip', 'python', 'node', 'java', 'gcc', 'make',
+            'docker', 'kubectl', 'curl', 'wget', 'ssh', 'scp', 'rsync'
+        ]
+        
+        partial_lower = partial_command.lower()
+        
+        for cmd in common_commands:
+            if cmd.startswith(partial_lower):
+                suggestions.append(cmd)
+        
+        return suggestions
+    
+    def create_script(self, script_content: str, script_path: str) -> Dict[str, Any]:
+        """Create a shell script file."""
+        try:
+            # Ensure script directory exists
+            path_obj = Path(script_path)
+            path_obj.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Write script content
+            with open(script_path, 'w') as f:
+                f.write(script_content)
+            
+            # Make executable (on Unix-like systems)
+            if os.name != 'nt':
+                os.chmod(script_path, 0o755)
+            
+            return {
+                "success": True,
+                "message": f"Script created: {script_path}",
+                "path": script_path
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    def get_environment_info(self) -> Dict[str, Any]:
+        """Get environment information."""
+        return {
+            "platform": os.name,
+            "cwd": os.getcwd(),
+            "home": os.path.expanduser("~"),
+            "shell": os.environ.get("SHELL", "unknown"),
+            "path": os.environ.get("PATH", ""),
+            "python_path": os.environ.get("PYTHONPATH", ""),
+            "user": os.environ.get("USER", os.environ.get("USERNAME", "unknown"))
+        }

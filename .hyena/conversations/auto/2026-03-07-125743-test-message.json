@@ -1,0 +1,11 @@
+{
+  "started_at": 1772888263.7140627,
+  "filename": "2026-03-07-125743-test-message.json",
+  "messages": [
+    {
+      "role": "user",
+      "content": "test message",
+      "timestamp": 1772888263.7140644
+    }
+  ]
+}
