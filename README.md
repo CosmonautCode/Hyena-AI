@@ -4,7 +4,6 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/status-active-brightgreen.svg)](https://github.com/CosmonautCode/Hyena)
 [![Made with UV](https://img.shields.io/badge/made%20with-uv-ff69b4.svg)](https://github.com/astral-sh/uv)
-[![Code Quality](https://img.shields.io/badge/code%20quality-95%25-brightgreen.svg)](docs/quality.md)
 [![Documentation](https://img.shields.io/badge/docs-comprehensive-blue.svg)](docs/)
 
 A **lightweight, self-contained** Python CLI chat system with local AI agents and file operations. This system uses **[Hyena3-4B-Instruct](https://huggingface.co/microsoft/Hyena-3-4B-Instruct)** (Custom Qwen Fork) and **[llama-cpp-python](https://github.com/abetlen/llama-cpp-python)** for inference, with **[Rich](https://github.com/Textualize/rich)** for a **beautiful console interface**. Features AI agents with workspace-based file operations and dynamic terminal sizing.
