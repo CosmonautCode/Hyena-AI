@@ -273,21 +273,6 @@ MIT License - See LICENSE file
 
 ---
 
-## Acknowledgments
-
-- **llama-cpp-python** for LLM inference
-- **Rich** for beautiful console UI
-- **Hyena3** for language model
-- **UV** for fast dependency management
-
----
-
-## License
-
-MIT License
-
----
-
 ## Links
 
 - **[Documentation](docs/)** - Complete documentation
