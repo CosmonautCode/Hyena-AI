@@ -6,7 +6,7 @@
 [![Made with UV](https://img.shields.io/badge/made%20with-uv-ff69b4.svg)](https://github.com/astral-sh/uv)
 [![Documentation](https://img.shields.io/badge/docs-comprehensive-blue.svg)](docs/)
 
-A **lightweight, self-contained** Python CLI chat system with local AI agents and file operations. This system uses **[Hyena3-4B-Instruct](https://huggingface.co/microsoft/Hyena-3-4B-Instruct)** (Custom Qwen Fork) and **[llama-cpp-python](https://github.com/abetlen/llama-cpp-python)** for inference, with **[Rich](https://github.com/Textualize/rich)** for a **beautiful console interface**. Features AI agents with workspace-based file operations and dynamic terminal sizing.
+A **lightweight, self-contained** Python CLI chat system with local AI agents and file operations. This system uses **[Hyena3-4B-Instruct](https://huggingface.co/microsoft/Hyena-3-4B-Instruct)** (Custom Qwen Fork) and **[llama-cpp-python](https://github.com/abetlen/llama-cpp-python)** for inference, with **[Rich](https://github.com/Textualize/rich)** for a **beautiful console interface**. Features AI agents with workspace-based file operations and dynamic terminal sizing. This has been a really fun side project and a nice addition to the tiny-local-llm ecosystem.
 
 ![Empty Chat](docs/screenshots/empty_chat.png)
 
