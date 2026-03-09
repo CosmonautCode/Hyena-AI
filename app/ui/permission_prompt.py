@@ -1,8 +1,9 @@
 """Permission prompt handling - Modern approval system."""
-
+import asyncio
 from rich.console import Console
 from rich.panel import Panel
 from .panels import PanelRenderer
+
 
 
 class PermissionPrompt:
@@ -74,7 +75,7 @@ class PermissionPrompt:
         args: dict
     ) -> str:
         """Synchronous version for non-async contexts."""
-        import asyncio
+
         try:
             return asyncio.run(self.request_approval(console, tool_name, args))
         except RuntimeError:
