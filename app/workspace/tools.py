@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 
 
@@ -50,7 +51,6 @@ class AITools:
         """Parse AI messages for tool calls."""
         # Simple pattern matching for tool calls
         # Format: @tool_name(arguments)
-        import re
         
         pattern = r'@(\w+)\((.*?)\)'
         matches = re.findall(pattern, message)
