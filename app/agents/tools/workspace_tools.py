@@ -4,6 +4,7 @@ from typing import Dict, Any
 import difflib
 import subprocess
 import os
+import fnmatch
 
 
 class WorkspaceToolsMixin:
@@ -101,7 +102,7 @@ class WorkspaceToolsMixin:
     
     def _search_fallback(self, workspace_path: str, pattern: str, file_pattern: str) -> list:
         """Fallback Python-based search when grep is not available."""
-        import fnmatch
+        
         matches = []
         
         for root, dirs, files in os.walk(workspace_path):
