@@ -3,6 +3,7 @@
 import asyncio
 from pathlib import Path
 from typing import Optional
+import json
 
 from app.ui.tui import TUI
 from app.core.commands import CommandManager
@@ -67,7 +68,7 @@ class ChatSystem(ChatLoopMixin):
 
     def _load_agent_config(self):
         """Load agent configuration from JSON file."""
-        import json
+        
         agents_file = Path(__file__).parent.parent / 'data' / 'agents.json'
         try:
             with open(agents_file, 'r') as f:
@@ -83,12 +84,14 @@ class ChatSystem(ChatLoopMixin):
 
     def process_command(self, user_input: str) -> bool:
         """Process a command and return whether to continue."""
+        
         result = self.command_manager.process_command(user_input)
         # Commands display their own output, no need for success feedback
         return result
 
     def load_agents(self):
         """Load the AI agents and initialize systems."""
+        
         # Load the LLM
         try:
             instances = load_instances(num_instances=1)
@@ -122,6 +125,7 @@ class ChatSystem(ChatLoopMixin):
 
     def choose_agent(self, index=None):
         """Choose an agent by index."""
+        
         if index is not None:
             if 0 <= index < len(self.agent_config):
                 self.current_agent_index = index
