@@ -1,5 +1,5 @@
 """Common utility functions for error handling and responses."""
-
+import os
 from typing import Dict, Any, Optional
 
 
@@ -38,7 +38,7 @@ def safe_execute(func, *args, **kwargs) -> Dict[str, Any]:
 
 def validate_file_path(path: str) -> bool:
     """Validate if a file path is safe."""
-    import os
+    
     # Basic safety checks
     if not path or not isinstance(path, str):
         return False
