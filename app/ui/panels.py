@@ -1,5 +1,5 @@
 """Tool call and result panel rendering - Modern terminal interface."""
-
+from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
 from rich import box
@@ -50,7 +50,6 @@ class PanelRenderer:
     
     def render_assistant_panel(self, content: str, title: str = 'Assistant', width: int = None) -> Panel:
         """Render assistant message panel with markdown support and smart wrapping."""
-        from rich.markdown import Markdown
         
         # Calculate appropriate width
         if width is None:
