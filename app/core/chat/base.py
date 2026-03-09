@@ -3,7 +3,7 @@
 import asyncio
 from pathlib import Path
 from typing import Optional
-
+import json
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -75,7 +75,7 @@ class ChatSystem(AgentManagementMixin, ConversationMixin, SessionManagementMixin
     
     def _load_agent_config(self):
         """Load agent configuration from JSON file."""
-        import json
+        
         agents_file = Path(__file__).parent.parent.parent / 'data' / 'agents.json'
         try:
             with open(agents_file, 'r') as f:
