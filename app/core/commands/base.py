@@ -2,7 +2,6 @@
 
 from rich.panel import Panel
 from rich.text import Text
-
 from .agent_commands import AgentCommandsMixin
 from .session_commands import SessionCommandsMixin
 from .workspace_commands import WorkspaceCommandsMixin
@@ -68,8 +67,6 @@ class CommandManager(
     
     def _handle_unknown_command(self, command):
         """Handle unknown commands."""
-        from rich.panel import Panel
-        from rich.text import Text
         
         message = f"Unknown command: {command}. Use /help for available commands."
         self.chat_system.tui.console.print(
