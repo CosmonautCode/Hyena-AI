@@ -20,7 +20,7 @@ A **lightweight, self-contained** Python CLI chat system with local AI agents an
 - **Rich Terminal UI**: Modern terminal interface with streaming responses and tool panels
 - **Permission System**: Y/N/Always/Never approval for dangerous operations
 - **No Manual Saves**: Everything auto-persists to `.hyena/` directory
-- **Modular Architecture**: 22 focused modules under 200 lines each
+- **Modular Architecture**: 22 clean modules under 200 lines each
 - **PEP 8 Compliant**: Google standards to make life easy
 
 ---
