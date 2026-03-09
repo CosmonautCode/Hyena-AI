@@ -1,6 +1,7 @@
 """Modern input handling with prompt_toolkit."""
 
 import re
+import asyncio
 from pathlib import Path
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
@@ -72,7 +73,7 @@ class Prompt:
     
     def get_input_sync(self, cwd: str = '') -> str:
         """Synchronous version for non-async contexts."""
-        import asyncio
+        
         try:
             return asyncio.run(self.get_input(cwd))
         except RuntimeError:
