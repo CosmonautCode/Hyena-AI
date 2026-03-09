@@ -5,6 +5,7 @@ import json
 import time
 from pathlib import Path
 import difflib
+import re
 
 
 class ToolManager:
@@ -203,8 +204,6 @@ class ToolManager:
     
     def _search_files(self, pattern: str, file_pattern: str = "*") -> Dict[str, Any]:
         """Search for text patterns in files."""
-        try:
-            import re
             
             # Get files to search
             list_result = self._list_files(file_pattern)
