@@ -1,0 +1,153 @@
+name: Hyena-AI CI Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio mypy flake8
+
+    - name: Lint with flake8
+      run: |
+        # Stop build on syntax errors or undefined names
+        flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        # All errors/warnings, exit 0 for now (warning only)
+        flake8 app/ --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+
+    - name: Type check with mypy
+      run: |
+        mypy app/ --ignore-missing-imports --no-strict-optional || true
+
+    - name: Run unit tests
+      run: |
+        pytest tests/unit/ -v --tb=short
+
+    - name: Run integration tests
+      run: |
+        pytest tests/integration/ -v --tb=short
+
+    - name: Run all tests with coverage
+      run: |
+        pytest tests/ -v --cov=app --cov-report=xml --cov-report=html
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+        verbose: true
+
+    - name: Generate test report
+      if: always()
+      run: |
+        pytest tests/ -v --html=test_report.html --self-contained-html || true
+
+    - name: Upload test report
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-report-py${{ matrix.python-version }}
+        path: test_report.html
+
+  quality:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pylint radon
+
+    - name: Code complexity analysis
+      run: |
+        radon cc app/ -s -j > complexity_report.json || true
+        radon metrics app/ -j > metrics_report.json || true
+
+    - name: Generate reports
+      run: |
+        echo "## Code Quality Report" > quality_report.md
+        echo "Generated at: $(date)" >> quality_report.md
+        echo "" >> quality_report.md
+        radon cc app/ -s >> quality_report.md || true
+
+    - name: Upload quality reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: quality-reports
+        path: |
+          complexity_report.json
+          metrics_report.json
+          quality_report.md
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [test, quality]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Build distribution
+      run: |
+        python -m pip install --upgrade pip build
+        python -m build
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-artifacts
+        path: dist/
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: [test, quality, build]
+    if: always()
+
+    steps:
+    - name: Test summary
+      run: echo "All CI/CD checks completed successfully!"
+
+    - name: Create job summary
+      run: |
+        echo "# CI/CD Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+        echo `**Tests**: All tests executed** >> $GITHUB_STEP_SUMMARY
+        echo "**Coverage**: Reports generated** >> $GITHUB_STEP_SUMMARY

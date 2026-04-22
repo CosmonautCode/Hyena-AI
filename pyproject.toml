@@ -1,0 +1,32 @@
+[project]
+name = "hyena"
+version = "0.0.1"
+description = "Tiny Hyena TUI system"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "diskcache",
+    "jinja2",
+    "llama-cpp-python",
+    "markdown-it-py",
+    "markupsafe",
+    "mdurl",
+    "numpy",
+    "pygments",
+    "prompt-toolkit",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "rich",
+    "textual",
+    "typing-extensions",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "e2e: End-to-end tests",
+    "slow: Slow tests",
+    "integration: Integration tests"
+]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
